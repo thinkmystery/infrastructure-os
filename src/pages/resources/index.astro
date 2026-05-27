@@ -1,0 +1,189 @@
+---
+import '../../styles/dashboard.css';
+import raw from '../../data/infrastructure/resources.json';
+
+type RecordItem = Record<string, string>;
+const records = raw as RecordItem[];
+const clean = (value: unknown) => String(value || "").trim();
+const show = (item: RecordItem) => {
+  const raw = clean(item["Display on Dashboard"]).toLowerCase();
+  return raw.includes("checked") || raw === "true" || raw === "yes" || raw === "1" || !("Display on Dashboard" in item);
+};
+const rank: Record<string, number> = { Critical: 1, High: 2, Medium: 3, Low: 4 };
+const badgeClass = (value: string) => clean(value).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+const firstPresent = (item: RecordItem, fields: string[]) => {
+  for (const field of fields) {
+    const value = clean(item[field]);
+    if (value) return value;
+  }
+  return "";
+};
+const shortText = (value: string, max = 125) => clean(value).length > max ? `${clean(value).slice(0, max)}…` : clean(value);
+const fieldRows = (item: RecordItem, fields: string[]) =>
+  fields.map((field) => ({ label: field, value: clean(item[field]) })).filter((row) => row.value);
+
+const list = records
+  .filter((item) => clean(item.Name))
+  .sort((a, b) => clean(a.Type).localeCompare(clean(b.Type)));
+
+const fields = ["Type","Status","Primary Contact","Email","Phone","Website","Cost","Internal Lead","Notes","Related Initiatives"];
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resources | Infrastructure OS</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="brand-kicker">Company Infrastructure OS</p>
+          <h1>Resources</h1>
+        </div>
+        <nav class="nav">
+
+          <a href="/">Overview</a>
+          <a  href="/initiatives/">Initiatives</a>
+          <a  href="/decisions/">Decisions</a>
+          <a  href="/questions/">Questions</a>
+          <a class='active' href="/resources/">Resources</a>
+        </nav>
+      </header>
+
+      <section class="database">
+        <div class="database-title">
+          <div>
+            <p class="eyebrow">External execution network</p>
+            <h2>Resources</h2>
+          </div>
+
+          </div>
+        </div>
+
+        <div class="table-head resources-head">
+          <span>Type</span><span>Name</span><span>Status</span><span>Contact</span><span>Notes</span>
+        </div>
+
+        <div class="db-list">
+          {list.map((item) => (
+            <details class="db-row">
+              <summary class="row-grid resources-grid">
+                <span>{item.Type || "—"}</span>
+                <strong>{item.Name}</strong>
+                <span>{item.Status || "—"}</span>
+                <span>{firstPresent(item, ["Primary Contact", "Email", "Phone"]) || "—"}</span>
+                <span>{shortText(item.Notes) || "—"}</span>
+              </summary>
+              <div class="record-detail single">
+                <div class="record-meta wide">
+                  {fieldRows(item, fields).map((row) => (
+                    <div class="kv"><span>{row.label}</span><strong>{row.value}</strong></div>
+                  ))}
+                </div>
+                <div class="record-text" style="margin-top:10px;">
+
+                    <section class="note-panel">
+                      <h4>Add founder note</h4>
+                      <form data-note-form>
+                        <input type="hidden" name="relatedType" value={"Resource"} />
+                        <input type="hidden" name="relatedName" value={item.Name} />
+                        <input type="hidden" name="priority" value={""} />
+
+                        <label>
+                          Note / feedback
+                          <textarea name="note" placeholder="Add decision context, concern, correction, or instruction..." required></textarea>
+                        </label>
+
+                        <div class="note-actions">
+                          <label>
+                            Type
+                            <select name="sentiment">
+                              <option>Comment</option>
+                              <option>Approval</option>
+                              <option>Concern</option>
+                              <option>Change Requested</option>
+                              <option>Decision</option>
+                            </select>
+                          </label>
+
+                          <label>
+                            Submitted by
+                            <input name="submittedBy" value="Founder" />
+                          </label>
+
+                          <button class="note-submit" type="submit">Save note</button>
+                        </div>
+
+                        <p class="note-status" data-note-status>Notes are saved into Airtable.</p>
+                      </form>
+                    </section>
+
+                </div>
+              </div>
+            </details>
+          ))}
+        </div>
+
+      </section>
+    </main>
+
+<script>
+  document.querySelectorAll("[data-note-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const status = form.querySelector("[data-note-status]");
+      const button = form.querySelector("button[type='submit']");
+      const data = Object.fromEntries(new FormData(form).entries());
+
+      data.currentUrl = window.location.href;
+
+      if (status) {
+        status.textContent = "Saving note...";
+        status.className = "note-status";
+      }
+
+      if (button) button.disabled = true;
+
+      try {
+        const response = await fetch("/api/founder-note", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        const responseText = await response.text();
+        let result = {};
+
+        try {
+          result = responseText ? JSON.parse(responseText) : {};
+        } catch {
+          throw new Error(responseText || `Non-JSON response from server. HTTP ${response.status}.`);
+        }
+
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || `Could not save note. HTTP ${response.status}.`);
+        }
+
+        form.reset();
+
+        if (status) {
+          status.textContent = "Saved to Airtable.";
+          status.className = "note-status good";
+        }
+      } catch (error) {
+        if (status) {
+          status.textContent = error.message || "Could not save note.";
+          status.className = "note-status bad";
+        }
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  });
+</script>
+
+  </body>
+</html>

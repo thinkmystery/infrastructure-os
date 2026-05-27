@@ -1,6 +1,5 @@
 ---
-// Fixed Astro page without inline React-style Badge component
-
+import '../styles/dashboard.css';
 import initiativesRaw from '../data/infrastructure/initiatives.json';
 import decisionsRaw from '../data/infrastructure/decisions.json';
 import questionsRaw from '../data/infrastructure/questions.json';
@@ -13,31 +12,50 @@ const decisions = decisionsRaw as RecordItem[];
 const questions = questionsRaw as RecordItem[];
 const resources = resourcesRaw as RecordItem[];
 
-const show = (item: RecordItem) => String(item["Display on Dashboard"] || "").toLowerCase().includes("checked");
-const displayedInitiatives = initiatives.filter(show);
-const displayedDecisions = decisions.filter(show);
-const displayedQuestions = questions.filter(show);
-const displayedResources = resources;
+const clean = (value: unknown) => String(value || "").trim();
+const show = (item: RecordItem) => {
+  const raw = clean(item["Display on Dashboard"]).toLowerCase();
+  return raw.includes("checked") || raw === "true" || raw === "yes" || raw === "1" || !("Display on Dashboard" in item);
+};
 
-const priorityRank: Record<string, number> = { Critical: 1, High: 2, Medium: 3, Low: 4 };
+const visibleInitiatives = initiatives.filter(show);
+const openInitiatives = visibleInitiatives.filter((item) => !["Completed", "Resolved", "Closed"].includes(clean(item.Status)));
+const openDecisions = decisions.filter(show).filter((item) => !["Resolved", "Closed", "Completed"].includes(clean(item.Status)));
+const openQuestions = questions.filter(show).filter((item) => !["Resolved", "Closed", "Completed"].includes(clean(item.Status)));
+const activeResources = resources.filter((item) => clean(item.Name));
 
-const criticalInitiatives = displayedInitiatives
-  .filter((item) => ["Critical", "High"].includes(item.Priority));
+const rank: Record<string, number> = { Critical: 1, High: 2, Medium: 3, Low: 4 };
+const badgeClass = (value: string) => clean(value).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+const firstPresent = (item: RecordItem, fields: string[]) => {
+  for (const field of fields) {
+    const value = clean(item[field]);
+    if (value) return value;
+  }
+  return "";
+};
 
-const quickWins = criticalInitiatives.slice(0, 8);
+const sortBy = (field: string) => (a: RecordItem, b: RecordItem) =>
+  (rank[clean(a[field])] ?? 99) - (rank[clean(b[field])] ?? 99);
 
-const founderDecisions = displayedDecisions
-  .filter((item) => item.Status !== "Resolved");
+const quickWins = openInitiatives
+  .filter((item) => ["Critical", "High"].includes(clean(item.Priority)))
+  .filter((item) => ["Low", "Medium", ""].includes(clean(item["Effort / Cost"]) || clean(item.Effort)))
+  .sort(sortBy("Priority"))
+  .slice(0, 8);
 
-const openRisks = displayedQuestions
-  .filter((item) => item.Status !== "Resolved");
+const topInitiatives = openInitiatives.sort(sortBy("Priority")).slice(0, 6);
+const topDecisions = openDecisions.sort(sortBy("Urgency")).slice(0, 5);
+const topQuestions = openQuestions.sort(sortBy("Severity")).slice(0, 5);
 
-const activeResources = displayedResources
-  .filter((item) => String(item.Name || "").trim());
-
-const initiativeCompletion = displayedInitiatives.length
-  ? Math.round((displayedInitiatives.filter((item) => item.Status === "Completed").length / displayedInitiatives.length) * 100)
+const completion = visibleInitiatives.length
+  ? Math.round((visibleInitiatives.filter((item) => ["Completed", "Resolved", "Closed"].includes(clean(item.Status))).length / visibleInitiatives.length) * 100)
   : 0;
+
+const statusCounts = visibleInitiatives.reduce((acc: Record<string, number>, item) => {
+  const key = clean(item.Status) || "Unclassified";
+  acc[key] = (acc[key] || 0) + 1;
+  return acc;
+}, {});
 ---
 
 <html lang="en">
@@ -49,254 +67,99 @@ const initiativeCompletion = displayedInitiatives.length
 
   <body>
     <main class="shell">
-
-      <section class="hero">
+      <header class="topbar">
         <div>
-          <p class="eyebrow">Company Infrastructure OS</p>
-          <h1>Institutional Readiness Dashboard</h1>
-          <p class="lede">
-            Founder-facing operating layer for governance, IP, fundraising readiness,
-            infrastructure planning, risks, and strategic execution.
-          </p>
+          <p class="brand-kicker">Company Infrastructure OS</p>
+          <h1>Command center</h1>
         </div>
 
-        <div class="score-card">
-          <span class="score-label">Readiness Progress</span>
-          <strong>{initiativeCompletion}%</strong>
+        <nav class="nav">
+          <a class="active" href="/">Overview</a>
+          <a href="/initiatives/">Initiatives</a>
+          <a href="/decisions/">Decisions</a>
+          <a href="/questions/">Questions</a>
+          <a href="/resources/">Resources</a>
+        </nav>
+      </header>
 
-          <div class="meter">
-            <span style={`width:${initiativeCompletion}%`}></span>
-          </div>
-
-          <p>{displayedInitiatives.length} initiatives tracked</p>
-        </div>
+      <section class="card-grid">
+        <a class="stat-card" href="/initiatives/"><span>Open initiatives</span><strong>{openInitiatives.length}</strong><em>execution queue</em></a>
+        <a class="stat-card" href="/decisions/"><span>Open decisions</span><strong>{openDecisions.length}</strong><em>founder input needed</em></a>
+        <a class="stat-card" href="/questions/"><span>Open questions</span><strong>{openQuestions.length}</strong><em>risk / ambiguity queue</em></a>
+        <a class="stat-card" href="/resources/"><span>Resources</span><strong>{activeResources.length}</strong><em>external execution layer</em></a>
       </section>
 
-      <section class="metrics-grid">
-        <article class="metric">
-          <span>Critical / High Initiatives</span>
-          <strong>{criticalInitiatives.length}</strong>
-        </article>
+      <section class="dashboard-grid">
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Immediate operating focus</p><h2>Priority queue</h2></div><a class="button" href="/initiatives/">View all</a></div>
+            <div class="panel-body stack">
+              {topInitiatives.map((item) => (
+                <a class="queue-card" href="/initiatives/">
+                  <i class={`pill ${badgeClass(item.Priority)}`}>{item.Priority || "—"}</i>
+                  <div><strong>{item.Initiative}</strong><p>{firstPresent(item, ["Next Action", "Notes", "Description"]) || "No next action listed"}</p></div>
+                  <span>→</span>
+                </a>
+              ))}
+            </div>
+          </section>
 
-        <article class="metric">
-          <span>Founder Decisions</span>
-          <strong>{founderDecisions.length}</strong>
-        </article>
+          <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Founder input</p><h2>Decision queue</h2></div><a class="button" href="/decisions/">View all</a></div>
+            <div class="panel-body stack">
+              {topDecisions.map((item) => (
+                <a class="queue-card" href="/decisions/">
+                  <i class={`pill ${badgeClass(item.Urgency)}`}>{item.Urgency || "—"}</i>
+                  <div><strong>{item.Decision}</strong><p>{item.Recommendation || item.Context || "No recommendation listed"}</p></div>
+                  <span>→</span>
+                </a>
+              ))}
+            </div>
+          </section>
 
-        <article class="metric">
-          <span>Open Questions</span>
-          <strong>{openRisks.length}</strong>
-        </article>
-
-        <article class="metric">
-          <span>External Resources</span>
-          <strong>{activeResources.length}</strong>
-        </article>
-      </section>
-
-      <section class="panel">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Immediate leverage</p>
-            <h2>Quick Wins</h2>
-          </div>
+          <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Risk / ambiguity</p><h2>Open questions</h2></div><a class="button" href="/questions/">View all</a></div>
+            <div class="panel-body stack">
+              {topQuestions.map((item) => (
+                <a class="queue-card" href="/questions/">
+                  <i class={`pill ${badgeClass(item.Severity)}`}>{item.Severity || "—"}</i>
+                  <div><strong>{item.Question}</strong><p>{item.Mitigation || item.Description || "No mitigation listed"}</p></div>
+                  <span>→</span>
+                </a>
+              ))}
+            </div>
+          </section>
         </div>
 
-        <div class="card-grid">
-          {quickWins.map((item) => (
-            <article class="card">
+        <aside class="side-stack">
+          <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Readiness</p><h2>{completion}% complete</h2></div></div>
+            <div class="panel-body"><div class="meter"><i style={`width:${completion}%`}></i></div><p class="home-note" style="margin-top:12px;">Founder notes are captured on each detailed record and written directly to Airtable.</p></div>
+          </section>
 
-              <div class="card-top">
+          <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Quick wins</p><h2>Low-friction moves</h2></div></div>
+            <div class="panel-body mini-list">
+              {quickWins.map((item) => (
+                <a class="mini-row" href="/initiatives/">
+                  <span class={`dot ${badgeClass(item.Priority)}`}></span>
+                  <strong>{item.Initiative}</strong>
+                  <em>{firstPresent(item, ["Effort / Cost", "Effort"]) || "TBD"}</em>
+                </a>
+              ))}
+            </div>
+          </section>
 
-                {item.Priority && (
-                  <span class={`badge ${item.Priority?.toLowerCase()}`}>
-                    {item.Priority}
-                  </span>
-                )}
-
-                {item.Status && (
-                  <span class="badge">
-                    {item.Status}
-                  </span>
-                )}
-
-              </div>
-
-              <h3>{item.Initiative}</h3>
-
-              <p>{item["Next Action"] || item.Notes}</p>
-
-            </article>
-          ))}
-        </div>
+          <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Operating shape</p><h2>Status</h2></div></div>
+            <div class="panel-body breakdown">
+              {Object.entries(statusCounts).map(([status, count]) => (
+                <div class="bar-row"><span>{status}</span><div><i style={`width:${Math.max(8, (count / Math.max(1, visibleInitiatives.length)) * 100)}%`}></i></div><strong>{count}</strong></div>
+              ))}
+            </div>
+          </section>
+        </aside>
       </section>
-
     </main>
   </body>
 </html>
-
-<style>
-:root{
-  color-scheme:dark;
-  --bg:#08111f;
-  --panel:rgba(255,255,255,.05);
-  --line:rgba(255,255,255,.12);
-  --text:#f5f7fb;
-  --muted:#aab6c8;
-  --accent:#9cc7ff;
-  --critical:#ffb6b6;
-  --high:#ffd7a1;
-  font-family:Inter,system-ui,sans-serif;
-}
-
-*{box-sizing:border-box}
-
-body{
-  margin:0;
-  background:var(--bg);
-  color:var(--text);
-}
-
-.shell{
-  width:min(1400px,calc(100% - 40px));
-  margin:0 auto;
-  padding:40px 0 80px;
-}
-
-.hero{
-  display:grid;
-  grid-template-columns:1fr 320px;
-  gap:24px;
-  margin-bottom:24px;
-}
-
-.eyebrow{
-  color:var(--accent);
-  font-size:12px;
-  text-transform:uppercase;
-  letter-spacing:.12em;
-  font-weight:800;
-}
-
-h1{
-  font-size:72px;
-  line-height:.92;
-  letter-spacing:-.06em;
-  margin:12px 0 18px;
-}
-
-.lede{
-  color:var(--muted);
-  font-size:20px;
-  max-width:760px;
-}
-
-.score-card,
-.metric,
-.panel,
-.card{
-  border:1px solid var(--line);
-  background:var(--panel);
-  border-radius:24px;
-  padding:24px;
-}
-
-.score-label{
-  color:var(--muted);
-  text-transform:uppercase;
-  font-size:12px;
-  font-weight:800;
-}
-
-.score-card strong{
-  display:block;
-  font-size:72px;
-  margin:12px 0;
-}
-
-.meter{
-  height:12px;
-  background:rgba(255,255,255,.08);
-  border-radius:999px;
-  overflow:hidden;
-}
-
-.meter span{
-  display:block;
-  height:100%;
-  background:linear-gradient(90deg,#9cc7ff,#d5b7ff);
-}
-
-.metrics-grid{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:16px;
-  margin-bottom:16px;
-}
-
-.metric strong{
-  display:block;
-  font-size:42px;
-  margin-top:10px;
-}
-
-.panel{
-  margin-top:16px;
-}
-
-.section-heading{
-  margin-bottom:20px;
-}
-
-.card-grid{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:14px;
-}
-
-.card-top{
-  display:flex;
-  gap:8px;
-  margin-bottom:12px;
-}
-
-.badge{
-  display:inline-flex;
-  padding:4px 10px;
-  border-radius:999px;
-  background:rgba(255,255,255,.08);
-  border:1px solid rgba(255,255,255,.14);
-  font-size:11px;
-  font-weight:800;
-  text-transform:uppercase;
-}
-
-.badge.critical{
-  background:var(--critical);
-  color:#220707;
-  border-color:transparent;
-}
-
-.badge.high{
-  background:var(--high);
-  color:#271504;
-  border-color:transparent;
-}
-
-.card p{
-  color:var(--muted);
-  line-height:1.6;
-}
-
-@media (max-width: 1100px){
-  .hero,
-  .metrics-grid,
-  .card-grid{
-    grid-template-columns:1fr;
-  }
-
-  h1{
-    font-size:52px;
-  }
-}
-</style>
