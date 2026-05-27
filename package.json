@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@astrojs/check": "latest",
+    "@astrojs/vercel": "^10.0.7",
     "astro": "latest",
     "typescript": "latest"
-  },
-  "devDependencies": {}
+  }
 }
