@@ -1,0 +1,302 @@
+---
+// Fixed Astro page without inline React-style Badge component
+
+import initiativesRaw from '../data/infrastructure/initiatives.json';
+import decisionsRaw from '../data/infrastructure/decisions.json';
+import questionsRaw from '../data/infrastructure/questions.json';
+import resourcesRaw from '../data/infrastructure/resources.json';
+
+type RecordItem = Record<string, string>;
+
+const initiatives = initiativesRaw as RecordItem[];
+const decisions = decisionsRaw as RecordItem[];
+const questions = questionsRaw as RecordItem[];
+const resources = resourcesRaw as RecordItem[];
+
+const show = (item: RecordItem) => String(item["Display on Dashboard"] || "").toLowerCase().includes("checked");
+const displayedInitiatives = initiatives.filter(show);
+const displayedDecisions = decisions.filter(show);
+const displayedQuestions = questions.filter(show);
+const displayedResources = resources;
+
+const priorityRank: Record<string, number> = { Critical: 1, High: 2, Medium: 3, Low: 4 };
+
+const criticalInitiatives = displayedInitiatives
+  .filter((item) => ["Critical", "High"].includes(item.Priority));
+
+const quickWins = criticalInitiatives.slice(0, 8);
+
+const founderDecisions = displayedDecisions
+  .filter((item) => item.Status !== "Resolved");
+
+const openRisks = displayedQuestions
+  .filter((item) => item.Status !== "Resolved");
+
+const activeResources = displayedResources
+  .filter((item) => String(item.Name || "").trim());
+
+const initiativeCompletion = displayedInitiatives.length
+  ? Math.round((displayedInitiatives.filter((item) => item.Status === "Completed").length / displayedInitiatives.length) * 100)
+  : 0;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Infrastructure OS</title>
+  </head>
+
+  <body>
+    <main class="shell">
+
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Company Infrastructure OS</p>
+          <h1>Institutional Readiness Dashboard</h1>
+          <p class="lede">
+            Founder-facing operating layer for governance, IP, fundraising readiness,
+            infrastructure planning, risks, and strategic execution.
+          </p>
+        </div>
+
+        <div class="score-card">
+          <span class="score-label">Readiness Progress</span>
+          <strong>{initiativeCompletion}%</strong>
+
+          <div class="meter">
+            <span style={`width:${initiativeCompletion}%`}></span>
+          </div>
+
+          <p>{displayedInitiatives.length} initiatives tracked</p>
+        </div>
+      </section>
+
+      <section class="metrics-grid">
+        <article class="metric">
+          <span>Critical / High Initiatives</span>
+          <strong>{criticalInitiatives.length}</strong>
+        </article>
+
+        <article class="metric">
+          <span>Founder Decisions</span>
+          <strong>{founderDecisions.length}</strong>
+        </article>
+
+        <article class="metric">
+          <span>Open Questions</span>
+          <strong>{openRisks.length}</strong>
+        </article>
+
+        <article class="metric">
+          <span>External Resources</span>
+          <strong>{activeResources.length}</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Immediate leverage</p>
+            <h2>Quick Wins</h2>
+          </div>
+        </div>
+
+        <div class="card-grid">
+          {quickWins.map((item) => (
+            <article class="card">
+
+              <div class="card-top">
+
+                {item.Priority && (
+                  <span class={`badge ${item.Priority?.toLowerCase()}`}>
+                    {item.Priority}
+                  </span>
+                )}
+
+                {item.Status && (
+                  <span class="badge">
+                    {item.Status}
+                  </span>
+                )}
+
+              </div>
+
+              <h3>{item.Initiative}</h3>
+
+              <p>{item["Next Action"] || item.Notes}</p>
+
+            </article>
+          ))}
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>
+
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#08111f;
+  --panel:rgba(255,255,255,.05);
+  --line:rgba(255,255,255,.12);
+  --text:#f5f7fb;
+  --muted:#aab6c8;
+  --accent:#9cc7ff;
+  --critical:#ffb6b6;
+  --high:#ffd7a1;
+  font-family:Inter,system-ui,sans-serif;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.shell{
+  width:min(1400px,calc(100% - 40px));
+  margin:0 auto;
+  padding:40px 0 80px;
+}
+
+.hero{
+  display:grid;
+  grid-template-columns:1fr 320px;
+  gap:24px;
+  margin-bottom:24px;
+}
+
+.eyebrow{
+  color:var(--accent);
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  font-weight:800;
+}
+
+h1{
+  font-size:72px;
+  line-height:.92;
+  letter-spacing:-.06em;
+  margin:12px 0 18px;
+}
+
+.lede{
+  color:var(--muted);
+  font-size:20px;
+  max-width:760px;
+}
+
+.score-card,
+.metric,
+.panel,
+.card{
+  border:1px solid var(--line);
+  background:var(--panel);
+  border-radius:24px;
+  padding:24px;
+}
+
+.score-label{
+  color:var(--muted);
+  text-transform:uppercase;
+  font-size:12px;
+  font-weight:800;
+}
+
+.score-card strong{
+  display:block;
+  font-size:72px;
+  margin:12px 0;
+}
+
+.meter{
+  height:12px;
+  background:rgba(255,255,255,.08);
+  border-radius:999px;
+  overflow:hidden;
+}
+
+.meter span{
+  display:block;
+  height:100%;
+  background:linear-gradient(90deg,#9cc7ff,#d5b7ff);
+}
+
+.metrics-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:16px;
+  margin-bottom:16px;
+}
+
+.metric strong{
+  display:block;
+  font-size:42px;
+  margin-top:10px;
+}
+
+.panel{
+  margin-top:16px;
+}
+
+.section-heading{
+  margin-bottom:20px;
+}
+
+.card-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+}
+
+.card-top{
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+
+.badge{
+  display:inline-flex;
+  padding:4px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.14);
+  font-size:11px;
+  font-weight:800;
+  text-transform:uppercase;
+}
+
+.badge.critical{
+  background:var(--critical);
+  color:#220707;
+  border-color:transparent;
+}
+
+.badge.high{
+  background:var(--high);
+  color:#271504;
+  border-color:transparent;
+}
+
+.card p{
+  color:var(--muted);
+  line-height:1.6;
+}
+
+@media (max-width: 1100px){
+  .hero,
+  .metrics-grid,
+  .card-grid{
+    grid-template-columns:1fr;
+  }
+
+  h1{
+    font-size:52px;
+  }
+}
+</style>
